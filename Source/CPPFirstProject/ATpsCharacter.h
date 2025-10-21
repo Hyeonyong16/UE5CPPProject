@@ -12,9 +12,19 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/TimelineComponent.h"
 
 // 얘가 include 중가장 마지막에 있어야함
 #include "ATpsCharacter.generated.h"
+
+UENUM(BlueprintType)
+enum class EPlayerState : uint8
+{
+	Idle UMETA(DisplayName = "Idle"),
+	Aiming UMETA(DisplayName = "Aiming"),
+	Inventory UMETA(DisplayName = "Inventory"),
+	Death UMETA(DisplayName = "Death"),
+};
 
 // 향상된 입력 시스템 사용을 위한 전방선언
 class UInputMappingContext;
@@ -50,6 +60,10 @@ protected:
 	// 카메라 이동 Look Action 추가
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> LookAction;
+
+	// 조준 Action 추가
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> AimAction;
 	
 public:	
 	// Called every frame
@@ -66,13 +80,36 @@ public:
 	UFUNCTION()
 	void Look(const FInputActionValue& Value);
 
+	// 우클릭 시 조준하는 함수
+	UFUNCTION()
+	void Aim(const FInputActionValue& Value);
+	
+	UFUNCTION()
+	void StopAiming(const FInputActionValue& Value);
+
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	TObjectPtr<UCameraComponent> ThirdPersonCameraComponent;
 
-	UPROPERTY(VisibleAnywhere, Category = "Mesh")
-	TObjectPtr<USkeletalMeshComponent> ThirdPersonMeshComponent;
-
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	TObjectPtr<USpringArmComponent> ThirdPersonSpringArmComponent;
+
+	UPROPERTY(EditAnywhere, Category = "PlayerStat")
+	TObjectPtr<class UPlayerData> PlayerData;
 	
+private:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats", meta=(AllowPrivateAccess=true))
+	EPlayerState CurrentPlayerState = EPlayerState::Idle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flags", meta=(AllowPrivateAccess=true))
+	bool IsAiming = false;
+
+	UPROPERTY(EditAnywhere, Category = "TimeLine")
+	TObjectPtr<UCurveFloat> AimCurve;
+
+	FTimeline AimTimeLine;
+	
+	UFUNCTION()
+	void AimUpdate(float Alpha);
+
+	FOnTimelineFloat ProgressUpdate;
 };

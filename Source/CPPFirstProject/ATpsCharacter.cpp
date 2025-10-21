@@ -3,22 +3,37 @@
 
 #include "ATpsCharacter.h"
 
+#include "PlayerData.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/TimelineComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 
 // Sets default values
 AATpsCharacter::AATpsCharacter()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
 	// Camera Setting
 	ThirdPersonSpringArmComponent = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	ThirdPersonSpringArmComponent->SetupAttachment(GetCapsuleComponent());
 	ThirdPersonSpringArmComponent->bUsePawnControlRotation = true;
-	
+	ThirdPersonSpringArmComponent->TargetArmLength = 200.f;
+	ThirdPersonSpringArmComponent->SocketOffset.Set(0.f, 50.f, 60.f);
 
 	ThirdPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	ThirdPersonCameraComponent->SetupAttachment(ThirdPersonSpringArmComponent);
+
+	PlayerData = CreateDefaultSubobject<UPlayerData>(TEXT("PlayerData"));
+	
+	static ConstructorHelpers::FObjectFinder<UCurveFloat> Curve(
+		TEXT("/Script/Engine.CurveFloat'/Game/Blueprints/Character/CB_Aim.CB_Aim'")
+	);
+	if (Curve.Succeeded())
+	{
+		AimCurve = Curve.Object;
+	}
+
 }
 
 // Called when the game starts or when spawned
@@ -41,8 +56,19 @@ void AATpsCharacter::BeginPlay()
 			Subsystem->AddMappingContext(ThirdPersonContext, 0);
 		}
 	}
-	
+
 	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Using ThirdPersonContext"));
+
+	// Aim 용 TimeLine 추가
+	if (AimCurve)
+	{
+		ProgressUpdate.BindUFunction(this, FName("AimUpdate")); // CallBack Func 바인딩
+		
+		// TimeLine 에 Curve 와 CallBack Func 추가
+		AimTimeLine.AddInterpFloat(AimCurve, ProgressUpdate);
+		AimTimeLine.SetTimelineLength(0.1f);
+		AimTimeLine.SetLooping(false);
+	}
 }
 
 // Called every frame
@@ -50,7 +76,7 @@ void AATpsCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	
+	AimTimeLine.TickTimeline(DeltaTime);
 }
 
 // 캐릭터에 일반 입력 컴포넌트가 있는지만 확인
@@ -76,8 +102,11 @@ void AATpsCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 		// 카메라 이동 바인딩
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AATpsCharacter::Look);
-	}
 
+		// Aim 액션 바인딩
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &AATpsCharacter::Aim);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &AATpsCharacter::StopAiming);
+	}
 }
 
 void AATpsCharacter::Move(const FInputActionValue& Value)
@@ -91,7 +120,7 @@ void AATpsCharacter::Move(const FInputActionValue& Value)
 		// 앞, 뒤 움직임
 		FRotator ForwardRotator(0, GetControlRotation().Yaw, 0);
 		AddMovementInput(UKismetMathLibrary::GetForwardVector(ForwardRotator) * MovementValue.Y);
-		
+
 		// 좌, 우 움직임
 		FRotator RightRotator = GetControlRotation();
 		const FVector Right = UKismetMathLibrary::GetRightVector(RightRotator);
@@ -113,5 +142,76 @@ void AATpsCharacter::Look(const FInputActionValue& Value)
 		AddControllerPitchInput(LookAxisValue.Y * -1);
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Look"));
 	}
+}
+
+void AATpsCharacter::Aim(const FInputActionValue& Value)
+{
+	if (CurrentPlayerState == EPlayerState::Idle)
+	{
+		CurrentPlayerState = EPlayerState::Aiming;
+		IsAiming = true;
+
+		GetCharacterMovement()->bOrientRotationToMovement = false;
+		GetCharacterMovement()->MaxWalkSpeed; // 속도 지정해줘야함
+		
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimStart"));
+
+		AimTimeLine.PlayFromStart();	// 타임라인 재생
+	}
+}
+
+void AATpsCharacter::StopAiming(const FInputActionValue& Value)
+{
+	if (CurrentPlayerState == EPlayerState::Aiming)
+	{
+		CurrentPlayerState = EPlayerState::Idle;
+	}
+	else
+	{
+		if (CurrentPlayerState == EPlayerState::Inventory)
+		{
+			if (IsAiming != true)
+			{
+				return;
+			}
+		}
+		else
+		{
+			return;
+		}
+	}
+
+	IsAiming = false;
+
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->MaxWalkSpeed; // 속도 지정해줘야함
+
+	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimEnd"));
+	
+	AimTimeLine.ReverseFromEnd();	// 타임라인 재생
+}
+
+void AATpsCharacter::AimUpdate(float Alpha)
+{
+	float CameraFOV = 90.f - (30.f * Alpha);
+	ThirdPersonCameraComponent->SetFieldOfView(CameraFOV);
+
+	float SpringArmLength = 200.f - (50.f * Alpha);
+	ThirdPersonSpringArmComponent->TargetArmLength = SpringArmLength;
+	FRotator MeshRelativeRot = FRotator(
+		GetMesh()->GetRelativeRotation().Pitch,
+		-90.f - (-12.f * Alpha),
+		GetMesh()->GetRelativeRotation().Roll
+	);
+	GetMesh()->SetRelativeRotation(MeshRelativeRot);
+
+	FVector SpringArmSocketOffset = FVector(
+		ThirdPersonSpringArmComponent->SocketOffset.X,
+		ThirdPersonSpringArmComponent->SocketOffset.Y,
+		60.f + (20.f * Alpha)
+	);
+	ThirdPersonSpringArmComponent->SocketOffset = SpringArmSocketOffset;
+	
+	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimTimeline"));
 }
 
