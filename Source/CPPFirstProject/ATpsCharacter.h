@@ -14,6 +14,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/TimelineComponent.h"
 
+#include 
+
 // 얘가 include 중가장 마지막에 있어야함
 #include "ATpsCharacter.generated.h"
 
@@ -47,23 +49,28 @@ protected:
 	virtual void BeginPlay() override;
 	
 	// 입력 매핑 컨텍스트 포인터
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputMappingContext> ThirdPersonContext;
 
 	// 이동, 점프 Action 추가
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> MoveAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> JumpAction;
 
 	// 카메라 이동 Look Action 추가
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> LookAction;
 
 	// 조준 Action 추가
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> AimAction;
+
+	// 사격 Action 추가
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> FireAction;
+	
 	
 public:	
 	// Called every frame
@@ -87,6 +94,9 @@ public:
 	UFUNCTION()
 	void StopAiming(const FInputActionValue& Value);
 
+	UFUNCTION()
+	void Fire(const FInputActionValue& Value);
+
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	TObjectPtr<UCameraComponent> ThirdPersonCameraComponent;
 
@@ -103,6 +113,12 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flags", meta=(AllowPrivateAccess=true))
 	bool IsAiming = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flags", meta=(AllowPrivateAccess=true))
+	bool IsFire = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flags", meta=(AllowPrivateAccess=true))
+	bool IsReloading = false;
+
 	UPROPERTY(EditAnywhere, Category = "TimeLine")
 	TObjectPtr<UCurveFloat> AimCurve;
 
@@ -112,4 +128,7 @@ private:
 	void AimUpdate(float Alpha);
 
 	FOnTimelineFloat ProgressUpdate;
+
+	FTimerHandle FireTimerHandle;
+	FTimerDelegate FireTimerDelegate;
 };

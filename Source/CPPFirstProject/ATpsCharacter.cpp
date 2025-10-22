@@ -6,7 +6,9 @@
 #include "PlayerData.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/TimelineComponent.h"
+#include "InputMappingContext.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 // Sets default values
 AATpsCharacter::AATpsCharacter()
@@ -24,8 +26,59 @@ AATpsCharacter::AATpsCharacter()
 	ThirdPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	ThirdPersonCameraComponent->SetupAttachment(ThirdPersonSpringArmComponent);
 
+	// 향상된 입력 시스템 설정
+	static ConstructorHelpers::FObjectFinder<UInputMappingContext> ThirdPersonContextRef(
+		TEXT("/Game/Blueprints/Input/IMC_Character.IMC_Character")
+	);
+	if (ThirdPersonContextRef.Succeeded())
+	{
+		ThirdPersonContext = ThirdPersonContextRef.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> MoveActionRef(
+		TEXT("/Game/Blueprints/Input/IA_Move.IA_Move")
+	);
+	if (MoveActionRef.Succeeded())
+	{
+		MoveAction = MoveActionRef.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> JumpActionRef(
+		TEXT("/Game/Blueprints/Input/IA_Jump.IA_Jump")
+	);
+	if (JumpActionRef.Succeeded())
+	{
+		JumpAction = JumpActionRef.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionRef(
+		TEXT("/Game/Blueprints/Input/IA_Look.IA_Look")
+	);
+	if (LookActionRef.Succeeded())
+	{
+		LookAction = LookActionRef.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> AimActionRef(
+		TEXT("/Game/Blueprints/Input/IA_Aiming.IA_Aiming")
+	);
+	if (AimActionRef.Succeeded())
+	{
+		AimAction = AimActionRef.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> FireActionRef(
+		TEXT("/Game/Blueprints/Input/IA_Fire.IA_Fire")
+	);
+	if (FireActionRef.Succeeded())
+	{
+		FireAction = FireActionRef.Object;
+	}
+
+	// 플레이어 데이터 설정
 	PlayerData = CreateDefaultSubobject<UPlayerData>(TEXT("PlayerData"));
-	
+
+	// 타임라인에 쓰일 커브 설정
 	static ConstructorHelpers::FObjectFinder<UCurveFloat> Curve(
 		TEXT("/Script/Engine.CurveFloat'/Game/Blueprints/Character/CB_Aim.CB_Aim'")
 	);
@@ -33,7 +86,6 @@ AATpsCharacter::AATpsCharacter()
 	{
 		AimCurve = Curve.Object;
 	}
-
 }
 
 // Called when the game starts or when spawned
@@ -63,12 +115,18 @@ void AATpsCharacter::BeginPlay()
 	if (AimCurve)
 	{
 		ProgressUpdate.BindUFunction(this, FName("AimUpdate")); // CallBack Func 바인딩
-		
+
 		// TimeLine 에 Curve 와 CallBack Func 추가
 		AimTimeLine.AddInterpFloat(AimCurve, ProgressUpdate);
 		AimTimeLine.SetTimelineLength(0.1f);
 		AimTimeLine.SetLooping(false);
 	}
+
+	FireTimerDelegate.BindLambda([this]
+	{
+		IsFire = false;
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("IsFire Setting"));
+	});
 }
 
 // Called every frame
@@ -106,6 +164,9 @@ void AATpsCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		// Aim 액션 바인딩
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &AATpsCharacter::Aim);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &AATpsCharacter::StopAiming);
+
+		// Fire 액션 바인딩
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Triggered, this, &AATpsCharacter::Fire);
 	}
 }
 
@@ -153,10 +214,10 @@ void AATpsCharacter::Aim(const FInputActionValue& Value)
 
 		GetCharacterMovement()->bOrientRotationToMovement = false;
 		GetCharacterMovement()->MaxWalkSpeed; // 속도 지정해줘야함
-		
+
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimStart"));
 
-		AimTimeLine.PlayFromStart();	// 타임라인 재생
+		AimTimeLine.PlayFromStart(); // 타임라인 재생
 	}
 }
 
@@ -187,8 +248,54 @@ void AATpsCharacter::StopAiming(const FInputActionValue& Value)
 	GetCharacterMovement()->MaxWalkSpeed; // 속도 지정해줘야함
 
 	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimEnd"));
+
+	AimTimeLine.ReverseFromEnd(); // 타임라인 재생
+}
+
+void AATpsCharacter::Fire(const FInputActionValue& Value)
+{
+	// 인벤토리가 열려있으면 return
+	if (CurrentPlayerState == EPlayerState::Inventory) { return; }
+
+	// 재장전 중이면 return
+
+	// 조준중이 아니면 return
+	if (IsAiming == false) { return; }
+
+	// 사격 딜레이 중이면 return
+	if (IsFire == true) { return; }
+
+	// 사격 딜레이 True
+	IsFire = true;
+
+	// timer 이벤트로 일정 시간 뒤 사격 딜레이 False
+	GetWorld()->GetTimerManager().SetTimer(FireTimerHandle, FireTimerDelegate, 0.3f, false, 0.3f);
+
+	// LineTrace 를 이용한 사격 구현
+	FHitResult HitResult;
+	FVector StartVector = ThirdPersonCameraComponent->GetComponentLocation();
+	FVector EndVector = StartVector + (ThirdPersonCameraComponent->GetForwardVector() * 10000.f);
+
+	// 본인은 라인트레이스에서 무시
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		StartVector, EndVector,
+		ECC_Visibility,
+		Params
+	);
 	
-	AimTimeLine.ReverseFromEnd();	// 타임라인 재생
+	if (bHit)
+	{
+		// 에디터에서의 이름
+		FString ActorName = HitResult.GetActor()->GetActorLabel();
+
+		// Hit 지점을 구체로 표시
+		DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, 10.f, 12, FColor::Yellow, false, 2.f);
+		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("Hit Actor: %s"), *ActorName));
+	}
 }
 
 void AATpsCharacter::AimUpdate(float Alpha)
@@ -211,7 +318,6 @@ void AATpsCharacter::AimUpdate(float Alpha)
 		60.f + (20.f * Alpha)
 	);
 	ThirdPersonSpringArmComponent->SocketOffset = SpringArmSocketOffset;
-	
+
 	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimTimeline"));
 }
-

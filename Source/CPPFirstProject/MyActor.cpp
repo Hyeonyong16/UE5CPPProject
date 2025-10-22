@@ -25,8 +25,6 @@ void AMyActor::BeginPlay()
 void AMyActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	UE_LOG(LogTemp, Log, TEXT("Tick"));
 }
 
 void AMyActor::CalculateDPS()
