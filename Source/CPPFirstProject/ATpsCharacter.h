@@ -34,6 +34,9 @@ class UInputAction;
 class UInputComponent;
 class UCapsuleComponent;
 
+class UInventoryComponent;
+class UPlayerData;
+
 UCLASS()
 class CPPFIRSTPROJECT_API AATpsCharacter : public ACharacter
 {
@@ -111,7 +114,10 @@ public:
 	TObjectPtr<USpringArmComponent> ThirdPersonSpringArmComponent;
 
 	UPROPERTY(EditAnywhere, Category = "PlayerStat")
-	TObjectPtr<class UPlayerData> PlayerData;
+	TObjectPtr<UPlayerData> PlayerData;
+	
+	UPROPERTY(EditAnywhere, Category = "Inventory")
+	TObjectPtr<UInventoryComponent> InventoryComponent;
 	
 private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats", meta=(AllowPrivateAccess=true))

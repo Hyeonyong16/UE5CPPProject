@@ -8,6 +8,7 @@
 #include "Components/TimelineComponent.h"
 #include "InputMappingContext.h"
 #include "Blueprint/UserWidget.h"
+#include "Inventory/InventoryComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -26,6 +27,9 @@ AATpsCharacter::AATpsCharacter()
 
 	ThirdPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	ThirdPersonCameraComponent->SetupAttachment(ThirdPersonSpringArmComponent);
+
+	// 플레이어 인벤토리 설정
+	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
 
 	// 향상된 입력 시스템 설정
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext> ThirdPersonContextRef(
@@ -127,8 +131,6 @@ void AATpsCharacter::BeginPlay()
 		}
 	}
 
-	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Using ThirdPersonContext"));
-
 	// Aim 용 TimeLine 추가
 	if (AimCurve)
 	{
@@ -143,7 +145,6 @@ void AATpsCharacter::BeginPlay()
 	FireTimerDelegate.BindLambda([this]
 	{
 		IsFire = false;
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("IsFire Setting"));
 	});
 
 	// 인벤토리 위젯 생성
@@ -210,9 +211,6 @@ void AATpsCharacter::Move(const FInputActionValue& Value)
 		FRotator RightRotator = GetControlRotation();
 		const FVector Right = UKismetMathLibrary::GetRightVector(RightRotator);
 		AddMovementInput(Right * MovementValue.X);
-
-
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Move"));
 	}
 }
 
@@ -225,7 +223,6 @@ void AATpsCharacter::Look(const FInputActionValue& Value)
 	{
 		AddControllerYawInput(LookAxisValue.X);
 		AddControllerPitchInput(LookAxisValue.Y * -1);
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Look"));
 	}
 }
 
@@ -238,8 +235,6 @@ void AATpsCharacter::Aim(const FInputActionValue& Value)
 
 		GetCharacterMovement()->bOrientRotationToMovement = false;
 		GetCharacterMovement()->MaxWalkSpeed; // 속도 지정해줘야함
-
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimStart"));
 
 		AimTimeLine.PlayFromStart(); // 타임라인 재생
 	}
@@ -270,8 +265,6 @@ void AATpsCharacter::StopAiming(const FInputActionValue& Value)
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->MaxWalkSpeed; // 속도 지정해줘야함
-
-	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimEnd"));
 
 	AimTimeLine.ReverseFromEnd(); // 타임라인 재생
 }
@@ -397,6 +390,4 @@ void AATpsCharacter::AimUpdate(float Alpha)
 		60.f + (20.f * Alpha)
 	);
 	ThirdPersonSpringArmComponent->SocketOffset = SpringArmSocketOffset;
-
-	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("AimTimeline"));
 }
