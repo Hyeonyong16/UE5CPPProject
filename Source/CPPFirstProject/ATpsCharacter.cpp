@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/TimelineComponent.h"
 #include "InputMappingContext.h"
+#include "Blueprint/UserWidget.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -75,6 +76,14 @@ AATpsCharacter::AATpsCharacter()
 		FireAction = FireActionRef.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UInputAction> InventoryActionRef(
+		TEXT("/Game/Blueprints/Input/IA_Inventory.IA_Inventory")
+	);
+	if (InventoryActionRef.Succeeded())
+	{
+		InventoryAction = InventoryActionRef.Object;
+	}
+
 	// 플레이어 데이터 설정
 	PlayerData = CreateDefaultSubobject<UPlayerData>(TEXT("PlayerData"));
 
@@ -85,6 +94,15 @@ AATpsCharacter::AATpsCharacter()
 	if (Curve.Succeeded())
 	{
 		AimCurve = Curve.Object;
+	}
+
+	// 인벤토리 클래스 설정
+	static ConstructorHelpers::FClassFinder<UUserWidget> InventoryHUDClassRef(
+		TEXT("/Script/UMGEditor.WidgetBlueprint'/Game/Blueprints/UI/WBP_Inventory.WBP_Inventory_C'")
+	);
+	if (InventoryHUDClassRef.Succeeded())
+	{
+		InventoryHUDClass = InventoryHUDClassRef.Class;
 	}
 }
 
@@ -127,6 +145,9 @@ void AATpsCharacter::BeginPlay()
 		IsFire = false;
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("IsFire Setting"));
 	});
+
+	// 인벤토리 위젯 생성
+	InventoryHUD = CreateWidget(GetWorld()->GetFirstPlayerController(), InventoryHUDClass);
 }
 
 // Called every frame
@@ -167,6 +188,9 @@ void AATpsCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 		// Fire 액션 바인딩
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Triggered, this, &AATpsCharacter::Fire);
+
+		// Inventory 액션 바인딩
+		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Triggered, this, &AATpsCharacter::Inventory);
 	}
 }
 
@@ -286,7 +310,7 @@ void AATpsCharacter::Fire(const FInputActionValue& Value)
 		ECC_Visibility,
 		Params
 	);
-	
+
 	if (bHit)
 	{
 		// 에디터에서의 이름
@@ -295,6 +319,61 @@ void AATpsCharacter::Fire(const FInputActionValue& Value)
 		// Hit 지점을 구체로 표시
 		DrawDebugSphere(GetWorld(), HitResult.ImpactPoint, 10.f, 12, FColor::Yellow, false, 2.f);
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow, FString::Printf(TEXT("Hit Actor: %s"), *ActorName));
+	}
+}
+
+void AATpsCharacter::Inventory()
+{
+	if (CurrentPlayerState == EPlayerState::Death) { return; }
+	// 현재 인벤토리가 열려있으면
+	if (InventoryHUD->IsInViewport())
+	{
+		// 인벤토리를 닫기
+		// 부모에게서 HUD 제거
+		InventoryHUD->RemoveFromParent();
+		
+		APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+		if (PlayerController)
+		{
+			// InputMode 를 GameOnly 로 변경
+			FInputModeGameOnly Input;
+			PlayerController->SetInputMode(Input);
+
+			// 마우스 커서 표시하지 않기
+			PlayerController->SetShowMouseCursor(false);
+
+			// 플레이어 상태를 Inventory 에서 Idle 로 변경
+			CurrentPlayerState = EPlayerState::Idle;
+		}
+	}
+	
+	// 현재 인벤토리가 닫혀있으면
+	else
+	{
+		InventoryHUD->AddToViewport();
+
+		APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+		if (PlayerController)
+		{
+			// InputMode 를 Game And UI 로 변경
+			FInputModeGameAndUI	Input;
+
+			// 포커스를 받을 위젯 설정
+			Input.SetWidgetToFocus(InventoryHUD->TakeWidget());
+
+			// 마우스 클릭 시 포커스가 UI 로 이동
+			Input.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			Input.SetHideCursorDuringCapture(false);
+
+			// 플레이어 컨트롤러의 입력 모드 설정
+			PlayerController->SetInputMode(Input);
+
+			// 마우스 커서 보이게 설정
+			PlayerController->SetShowMouseCursor(true);
+
+			// 플레이어 상태를 Inventory 로 변경
+			CurrentPlayerState = EPlayerState::Inventory;
+		}
 	}
 }
 

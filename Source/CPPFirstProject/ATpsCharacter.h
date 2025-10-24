@@ -14,7 +14,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/TimelineComponent.h"
 
-#include 
+#include "Struct/MyStructures.h"
 
 // 얘가 include 중가장 마지막에 있어야함
 #include "ATpsCharacter.generated.h"
@@ -70,6 +70,10 @@ protected:
 	// 사격 Action 추가
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> FireAction;
+
+	// 인벤토리 Action 추가
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> InventoryAction;
 	
 	
 public:	
@@ -83,7 +87,7 @@ public:
 	UFUNCTION()
 	void Move(const FInputActionValue& Value);
 
-	// 마우스 값으로 Look Input 을 적용하는 함수
+	// 마우스 값으로 Look Input 을 적용하는 함수s
 	UFUNCTION()
 	void Look(const FInputActionValue& Value);
 
@@ -96,6 +100,9 @@ public:
 
 	UFUNCTION()
 	void Fire(const FInputActionValue& Value);
+
+	UFUNCTION()
+	void Inventory();
 
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	TObjectPtr<UCameraComponent> ThirdPersonCameraComponent;
@@ -131,4 +138,12 @@ private:
 
 	FTimerHandle FireTimerHandle;
 	FTimerDelegate FireTimerDelegate;
+
+	// 인벤토리 관련
+protected:
+	UPROPERTY(EditAnywhere, Category = "Inventory", meta = (AllowPrivateAccess = true))
+	TSubclassOf<class UUserWidget> InventoryHUDClass;
+
+	UPROPERTY()
+	TObjectPtr<UUserWidget> InventoryHUD;
 };
